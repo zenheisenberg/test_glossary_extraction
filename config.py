@@ -1,6 +1,12 @@
 """Kappahl Glossary Extraction Pipeline v2 - Configuration"""
 from pathlib import Path
 
+try:
+    import torch
+    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+except ImportError:
+    DEVICE = "cpu"
+
 # Paths
 BASE_DIR = Path(__file__).parent
 PROJECT_ROOT = BASE_DIR

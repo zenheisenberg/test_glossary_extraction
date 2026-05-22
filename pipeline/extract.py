@@ -77,7 +77,14 @@ def _get_keybert():
     global _keybert_instance
     if _keybert_instance is None:
         from keybert import KeyBERT  # type: ignore
-        _keybert_instance = KeyBERT()
+        try:
+            import torch
+            from sentence_transformers import SentenceTransformer
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            st_model = SentenceTransformer("all-MiniLM-L6-v2", device=device)
+            _keybert_instance = KeyBERT(model=st_model)
+        except Exception:
+            _keybert_instance = KeyBERT()
     return _keybert_instance
 
 

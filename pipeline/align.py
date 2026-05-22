@@ -17,6 +17,12 @@ from sentence_transformers import SentenceTransformer
 
 load_dotenv()
 
+try:
+    import torch as _torch
+    _DEFAULT_DEVICE = "cuda" if _torch.cuda.is_available() else "cpu"
+except ImportError:
+    _DEFAULT_DEVICE = "cpu"
+
 
 class LaBSEAligner:
     """Aligns source terms to target-language phrases via LaBSE embeddings."""
@@ -25,8 +31,10 @@ class LaBSEAligner:
         self,
         model_name: str = "sentence-transformers/LaBSE",
         target_cache_size: int = 2048,
+        device: str | None = None,
     ) -> None:
         self._model_name = model_name
+        self._device = device if device is not None else _DEFAULT_DEVICE
         self._model: SentenceTransformer | None = None
         # LRU cache: target_text(s) → (candidate_phrases, candidate_embeddings)
         # Avoids re-encoding identical target texts seen across different source terms
@@ -42,7 +50,9 @@ class LaBSEAligner:
         """Lazy-load the LaBSE model (singleton per instance)."""
         if self._model is None:
             token = os.getenv("HF_TOKEN")
-            self._model = SentenceTransformer(self._model_name, token=token)
+            self._model = SentenceTransformer(
+                self._model_name, token=token, device=self._device
+            )
         return self._model
 
     # ------------------------------------------------------------------

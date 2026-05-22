@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from config import (
     EXCEL_PATH, DB_PATH, SOURCE_LOCALE, TARGET_LOCALES, FIELD_WEIGHTS,
-    LABSE_REVIEW,
+    LABSE_REVIEW, DEVICE,
 )
 from db.database import CandidateDB
 from pipeline.ingest import load_excel, get_field_locale_pairs
@@ -50,6 +50,7 @@ def run_pipeline(excel_path: str = None, db_path: str = None,
     print(f"Source:          {excel_path}")
     print(f"Database:        {db_path}")
     print(f"Target locales:  {locales}")
+    print(f"Device:          {DEVICE}")
 
     # ── Stage 1: Init DB ──────────────────────────────────────────────────────
     t0 = _stage("Init database", 1, TOTAL_STAGES)
@@ -63,7 +64,7 @@ def run_pipeline(excel_path: str = None, db_path: str = None,
 
     # ── Stage 3: Load LaBSE aligner ───────────────────────────────────────────
     t0 = _stage("Load LaBSE aligner", 3, TOTAL_STAGES)
-    aligner = LaBSEAligner()
+    aligner = LaBSEAligner(device=DEVICE)
     _stage_done(t0)
 
     # ── Stage 4: Ingest Excel ─────────────────────────────────────────────────
