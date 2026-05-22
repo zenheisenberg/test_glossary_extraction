@@ -1,5 +1,10 @@
 """Kappahl Glossary Extraction Pipeline v2 - Configuration"""
+import os
 from pathlib import Path
+
+from dotenv import load_dotenv
+
+load_dotenv()
 
 try:
     import torch
@@ -88,3 +93,25 @@ FASHION_COMPOUNDS = [
     (r"\bA\s+line\b", "A-line"),
     (r"\banti\s+slip\b", "anti-slip"),
 ]
+
+# ---------------------------------------------------------------------------
+# Review Stage — Azure OpenAI (Foundry) configuration
+# Uses standard OpenAI SDK with base_url pointing to Azure Foundry endpoint
+# ---------------------------------------------------------------------------
+AZURE_OPENAI_ENDPOINT = os.getenv(
+    "AZURE_OPENAI_ENDPOINT",
+    "https://inspire-use2-dev-ai-foundry.cognitiveservices.azure.com/openai/v1/",
+)
+AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY", "")
+AZURE_OPENAI_DEPLOYMENT_NAME = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4.1-mini")
+
+REVIEW_MODEL = AZURE_OPENAI_DEPLOYMENT_NAME
+
+# Batch / rate-limit settings
+REVIEW_BATCH_SIZE = 20          # candidates per API call (structured output)
+REVIEW_MAX_CONCURRENT = 5       # parallel requests
+REVIEW_TIMEOUT_SECONDS = 60     # per-request timeout
+REVIEW_MAX_RETRIES = 3          # retries on transient failures
+
+# Domain context for the review LLM
+REVIEW_DOMAIN_CONTEXT = "fashion apparel retail, Scandinavian market, sustainability-focused clothing brand"

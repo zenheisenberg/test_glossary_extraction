@@ -161,5 +161,86 @@ class CandidateDB:
         )
         self.conn.commit()
 
+    # ------------------------------------------------------------------
+    # Review stage helpers
+    # ------------------------------------------------------------------
+
+    def get_candidates_for_review(
+        self,
+        phase: int = 1,
+        target_locale: str | None = None,
+        limit: int = 5000,
+    ) -> list[dict]:
+        """Fetch candidates awaiting LLM review.
+
+        Phase 1: unique source terms (status='needs_review'), grouped.
+        Phase 2: locale pairs where source passed Phase 1 (status='phase1_approved').
+        """
+        if phase == 1:
+            # Distinct source terms with aggregated metadata
+            query = """
+                SELECT
+                    normalized_source AS source_term,
+                    source_locale,
+                    SUM(frequency) AS frequency,
+                    GROUP_CONCAT(DISTINCT field_origin) AS field_origins,
+                    GROUP_CONCAT(DISTINCT domain) AS domains
+                FROM candidates
+                WHERE status = 'needs_review'
+                GROUP BY normalized_source
+                ORDER BY SUM(frequency) DESC
+                LIMIT ?
+            """
+            rows = self.conn.execute(query, (limit,)).fetchall()
+        else:
+            # Phase 2: individual locale pairs that survived Phase 1
+            query = """
+                SELECT *
+                FROM candidates
+                WHERE status = 'phase1_approved'
+            """
+            params: list = []
+            if target_locale:
+                query += " AND target_locale = ?"
+                params.append(target_locale)
+            query += " ORDER BY final_score DESC LIMIT ?"
+            params.append(limit)
+            rows = self.conn.execute(query, params).fetchall()
+
+        return [dict(r) for r in rows]
+
+    def bulk_update_judgments(self, judgments: list[dict]) -> int:
+        """Write review verdicts back to the DB.
+
+        Each dict in `judgments` must have:
+          - 'source_term' (for phase 1) or 'id' (for phase 2)
+          - 'status': new status string
+          - 'reviewer_notes': JSON-encoded judgment details
+        """
+        if not judgments:
+            return 0
+
+        now = datetime.now(timezone.utc).isoformat()
+        updated = 0
+
+        with self.conn:
+            for j in judgments:
+                if "id" in j:
+                    # Phase 2: update by candidate ID
+                    self.conn.execute(
+                        "UPDATE candidates SET status=?, reviewer_notes=?, updated_at=? WHERE id=?",
+                        (j["status"], j.get("reviewer_notes"), now, j["id"]),
+                    )
+                else:
+                    # Phase 1: update all rows sharing this source term
+                    self.conn.execute(
+                        "UPDATE candidates SET status=?, reviewer_notes=?, updated_at=? "
+                        "WHERE normalized_source=?",
+                        (j["status"], j.get("reviewer_notes"), now, j["source_term"]),
+                    )
+                updated += 1
+
+        return updated
+
     def close(self):
         self.conn.close()
