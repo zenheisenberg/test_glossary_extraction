@@ -20,6 +20,8 @@ _SENTENCE_STARTERS = {
     "because",
     "but",
     "can",
+    "contain",
+    "contains",
     "do",
     "does",
     "for",
@@ -34,6 +36,7 @@ _SENTENCE_STARTERS = {
     "it",
     "its",
     "let",
+    "made",
     "may",
     "me",
     "might",
@@ -280,9 +283,23 @@ _DIM_LABEL_RE = re.compile(
 # H: Age / year ranges  e.g. "3 years", "8-14 years", "12+ years"
 _AGE_RANGE_RE = re.compile(r"^\d+(?:[–\-]\d+)?\+?\s+years?\b$", re.I)
 
+# I: Pure bare measurements with no trailing label word — e.g. "95 cm", "98.5 cm", "73x73 cm"
+#    (Distinct from _DIM_LABEL_RE which only fires when a label word follows the unit.)
+_PURE_MEASUREMENT_RE = re.compile(
+    r"^\d[\d.,x]*\s*(?:cm|mm|m|km|kg|g|ml|l|oz|lb|in|ft)\s*$", re.I
+)
+
+# J: Numeric-prefixed material/fabric terms — e.g. "95% organic cotton", "82 recycled polyester"
+#    Strips the leading "NN%" or "NN " so the canonical term can be recovered by the caller.
+_NUMERIC_MATERIAL_PREFIX_RE = re.compile(r"^\d+(?:[.,]\d+)?\s*%?\s+")
+
 
 def is_valid_candidate(term_dict: dict) -> bool:
-    """Return True when the glossary candidate passes filtering rules."""
+    """Return True when the glossary candidate passes filtering rules.
+
+    NOTE: Call filter_candidates() rather than this directly — it applies
+    numeric-prefix normalization before validation and deduplicates the result.
+    """
 
     term = str(term_dict.get("term", "")).strip()
     if len(term) < MIN_TERM_CHARS:
@@ -315,7 +332,7 @@ def is_valid_candidate(term_dict: dict) -> bool:
     if punctuation_count > 2:
         return False
 
-    # ── Custom domain rules (Kappahl quality categories A / B / C / F / H) ──
+    # ── Custom domain rules (Kappahl quality categories A / B / C / F / H / I) ──
     if _LEADING_PUNCT_RE.match(term):
         return False
 
@@ -331,10 +348,56 @@ def is_valid_candidate(term_dict: dict) -> bool:
     if _AGE_RANGE_RE.match(term):
         return False
 
+    # I: Pure bare measurement — "95 cm", "73x73 cm"
+    if _PURE_MEASUREMENT_RE.fullmatch(term):
+        return False
+
     return True
 
 
-def filter_candidates(terms: list[dict]) -> list[dict]:
-    """Return only valid glossary candidates while preserving input dictionaries."""
+def _strip_numeric_prefix(term: str) -> str:
+    """Strip a leading numeric prefix from a material/fabric term.
 
-    return [term_dict for term_dict in terms if is_valid_candidate(term_dict)]
+    Examples:
+        "95% organic cotton"  → "organic cotton"
+        "82 recycled polyester" → "recycled polyester"
+        "organic cotton"       → "organic cotton"  (unchanged)
+    """
+    cleaned = _NUMERIC_MATERIAL_PREFIX_RE.sub("", term).strip()
+    return cleaned if cleaned else term
+
+
+def filter_candidates(terms: list[dict]) -> list[dict]:
+    """Return only valid glossary candidates.
+
+    Steps applied in order:
+    1. Normalize: strip leading numeric/percentage prefixes (J) so that
+       "95% organic cotton" and "organic cotton" map to the same canonical term.
+    2. Validate: run is_valid_candidate() on the (possibly cleaned) term.
+    3. Deduplicate: after normalization two different raw spans may collapse to
+       the same canonical term — keep only the first occurrence.
+    """
+    seen_normalised: set[str] = set()
+    result: list[dict] = []
+
+    for term_dict in terms:
+        original_term = str(term_dict.get("term", "")).strip()
+        cleaned_term = _strip_numeric_prefix(original_term)
+
+        # Build a (shallow) copy only when normalization actually changed the term
+        if cleaned_term != original_term:
+            term_dict = dict(term_dict)
+            term_dict["term"] = cleaned_term
+            term_dict["normalized_term"] = cleaned_term.lower()
+
+        if not is_valid_candidate(term_dict):
+            continue
+
+        # Deduplicate on the (now canonical) normalised form
+        norm = term_dict["term"].lower()
+        if norm in seen_normalised:
+            continue
+        seen_normalised.add(norm)
+        result.append(term_dict)
+
+    return result
