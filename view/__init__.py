@@ -1,0 +1,1 @@
+"""Glossary candidates viewer package."""

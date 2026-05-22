@@ -14,15 +14,27 @@ Evaluate on these 3 criteria (each 1-5):
 3. Domain Relevance for PIM: Is it relevant to the customer domain? (5=core domain term, 1=off-domain)
 
 Verdict rules:
-- If cleanness < 3: REJECTED (garbled_source)
-- If utility < 2: REJECTED (too_generic)
-- If domain_relevance < 2: REJECTED (off_domain)
-- If all scores >= 4: APPROVED
-- Otherwise: NEEDS_HUMAN_REVIEW
+- If cleanness < 3: verdict = "rejected", rejection_reasons includes "garbled_source"
+- If utility < 2: verdict = "rejected", rejection_reasons includes "too_generic"
+- If domain_relevance < 2: verdict = "rejected", rejection_reasons includes "off_domain"
+- If all scores >= 4: verdict = "approved"
+- Otherwise: verdict = "needs_human_review"
+- If brand name (e.g. TENCEL®, GOTS, Lycra): verdict = "verbatim_entry", rejection_reasons includes "brand_name_verbatim"
 
-If the term is a brand name (e.g. TENCEL®, GOTS, Lycra): verdict = VERBATIM_ENTRY (keep source as-is, do not translate)
+You MUST respond with a single JSON object matching this EXACT schema (no markdown fencing, no extra text):
 
-Respond with valid JSON matching the schema exactly. No markdown, no explanation outside JSON."""
+{{
+  "verdict": "approved" | "needs_human_review" | "rejected" | "verbatim_entry",
+  "confidence": <float 0.0-1.0>,
+  "source_term_cleanness": <int 1-5>,
+  "glossary_utility": <int 1-5>,
+  "domain_relevance": <int 1-5>,
+  "rejection_reasons": [<zero or more of: "trivial_pair", "truncated_target", "partial_translation", "garbled_source", "too_generic", "off_domain", "brand_name_verbatim", "low_consistency_need">],
+  "suggested_normalized_source": <string or null>,
+  "notes": "<1-2 sentences explaining the judgment>"
+}}
+
+IMPORTANT: Use lowercase values for verdict and rejection_reasons exactly as shown above."""
 
 SYSTEM_PROMPT_PHASE2 = """You are a translation glossary quality judge for a PIM (Product Information Management) system.
 
@@ -44,13 +56,25 @@ Also determine:
 - Is this a brand name that should be kept verbatim (not translated)?
 
 Verdict rules:
-- If translation_pair_validity < 2: REJECTED (trivial_pair or truncated_target)
-- If consistency_value < 2: REJECTED (low_consistency_need)
-- If brand verbatim: VERBATIM_ENTRY
-- If both scores >= 4: APPROVED
-- Otherwise: NEEDS_HUMAN_REVIEW
+- If translation_pair_validity < 2: verdict = "rejected", rejection_reasons includes "trivial_pair" or "truncated_target"
+- If translation_consistency_value < 2: verdict = "rejected", rejection_reasons includes "low_consistency_need"
+- If brand verbatim: verdict = "verbatim_entry", rejection_reasons includes "brand_name_verbatim"
+- If both scores >= 4: verdict = "approved"
+- Otherwise: verdict = "needs_human_review"
 
-Respond with valid JSON matching the schema exactly. No markdown, no explanation outside JSON."""
+You MUST respond with a single JSON object matching this EXACT schema (no markdown fencing, no extra text):
+
+{{
+  "verdict": "approved" | "needs_human_review" | "rejected" | "verbatim_entry",
+  "confidence": <float 0.0-1.0>,
+  "translation_pair_validity": <int 1-5>,
+  "translation_consistency_value": <int 1-5>,
+  "is_brand_verbatim": <true or false>,
+  "rejection_reasons": [<zero or more of: "trivial_pair", "truncated_target", "partial_translation", "garbled_source", "too_generic", "off_domain", "brand_name_verbatim", "low_consistency_need">],
+  "notes": "<1-2 sentences explaining the judgment>"
+}}
+
+IMPORTANT: Use lowercase values for verdict and rejection_reasons exactly as shown above."""
 
 
 USER_PROMPT_PHASE1 = """Judge this source term:

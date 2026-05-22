@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Glossary Candidates Viewer</title>
+<!-- DataTables CSS -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/jquery.dataTables.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.dataTables.min.css">
+<style>
+* { box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: #f5f7fa; color: #1a1a2e; padding: 24px; }
+h1 { font-size: 1.5rem; margin-bottom: 20px; }
+.stats-bar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
+.stat-card { background: #fff; border-radius: 8px; padding: 12px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); cursor: pointer; transition: box-shadow 0.15s; }
+.stat-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+.stat-card.active { border: 2px solid #4361ee; }
+.stat-card .label { font-size: 0.7rem; text-transform: uppercase; color: #666; letter-spacing: 0.5px; }
+.stat-card .value { font-size: 1.3rem; font-weight: 700; margin-top: 2px; }
+.filters { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }
+.filters select { padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem; background: #fff; }
+.filters button { padding: 8px 14px; border: none; border-radius: 6px; background: #e74c3c; color: #fff; cursor: pointer; font-size: 0.85rem; }
+.filters button:hover { background: #c0392b; }
+.table-container { background: #fff; border-radius: 8px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+/* Badge styles */
+.badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.72rem; font-weight: 600; white-space: nowrap; }
+.badge-needs_review { background: #fff3cd; color: #856404; }
+.badge-phase1_approved { background: #d4edda; color: #155724; }
+.badge-approved { background: #28a745; color: #fff; }
+.badge-rejected { background: #f8d7da; color: #721c24; }
+.badge-needs_human_review { background: #cce5ff; color: #004085; }
+.badge-verbatim_entry { background: #e2d9f3; color: #4a148c; }
+/* Score colors */
+.score-high { color: #28a745; font-weight: 600; }
+.score-mid { color: #e67e22; font-weight: 600; }
+.score-low { color: #dc3545; font-weight: 600; }
+/* DataTables overrides */
+table.dataTable { font-size: 0.82rem; }
+table.dataTable thead th { background: #f0f2f5; font-weight: 600; white-space: nowrap; }
+table.dataTable tbody td { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dataTables_wrapper .dataTables_filter input { padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; }
+.dataTables_wrapper .dataTables_length select { padding: 4px 8px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<h1>Glossary Candidates Viewer</h1>
+
+<div class="stats-bar" id="stats-bar"></div>
+
+<div class="filters">
+  <label>Status:
+    <select id="filter-status">
+      <option value="">All</option>
+      <option value="needs_review">needs_review</option>
+      <option value="phase1_approved">phase1_approved</option>
+      <option value="approved">approved</option>
+      <option value="rejected">rejected</option>
+      <option value="needs_human_review">needs_human_review</option>
+      <option value="verbatim_entry">verbatim_entry</option>
+    </select>
+  </label>
+  <label>Locale:
+    <select id="filter-locale">
+      <option value="">All</option>
+    </select>
+  </label>
+  <button onclick="clearFilters()">Clear Filters</button>
+</div>
+
+<div class="table-container">
+  <table id="candidates-table" class="display" style="width:100%">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Status</th>
+        <th>Source Term</th>
+        <th>Target Term</th>
+        <th>Locale</th>
+        <th>Domain</th>
+        <th>Field</th>
+        <th>Freq</th>
+        <th>LaBSE</th>
+        <th>Score</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+  </table>
+</div>
+
+<!-- jQuery + DataTables JS -->
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
+<script>
+let table;
+
+function scoreHtml(val) {
+  if (val === null || val === undefined) return '-';
+  const n = parseFloat(val).toFixed(3);
+  if (val >= 0.8) return `<span class="score-high">${n}</span>`;
+  if (val >= 0.6) return `<span class="score-mid">${n}</span>`;
+  return `<span class="score-low">${n}</span>`;
+}
+
+function badgeHtml(status) {
+  return `<span class="badge badge-${status}">${status}</span>`;
+}
+
+function esc(s) {
+  if (!s) return '';
+  const el = document.createElement('span');
+  el.textContent = s;
+  return el.innerHTML;
+}
+
+$(document).ready(function() {
+  table = $('#candidates-table').DataTable({
+    processing: true,
+    serverSide: true,
+    ajax: {
+      url: '/api/datatables',
+      data: function(d) {
+        d.status = $('#filter-status').val();
+        d.locale = $('#filter-locale').val();
+      }
+    },
+    columns: [
+      { data: 'id', width: '50px' },
+      { data: 'status', render: (d) => badgeHtml(d), width: '130px' },
+      { data: 'source_term', render: (d) => `<span title="${esc(d)}">${esc(d)}</span>` },
+      { data: 'target_term', render: (d) => `<span title="${esc(d)}">${esc(d)}</span>` },
+      { data: 'target_locale', width: '70px' },
+      { data: 'domain', render: (d) => d || '-' },
+      { data: 'field_origin', render: (d) => d || '-', width: '100px' },
+      { data: 'frequency', width: '50px' },
+      { data: 'labse_score', render: (d) => scoreHtml(d), width: '70px' },
+      { data: 'final_score', render: (d) => scoreHtml(d), width: '70px' },
+      { data: 'reviewer_notes', render: (d) => d ? `<span title="${esc(d)}">${esc(d).substring(0, 50)}</span>` : '-' },
+    ],
+    pageLength: 50,
+    lengthMenu: [25, 50, 100, 200],
+    order: [[9, 'desc']],
+    dom: 'Blfrtip',
+    buttons: ['csv', 'copy'],
+    language: {
+      processing: 'Loading...',
+      emptyTable: 'No candidates found.',
+      info: 'Showing _START_ to _END_ of _TOTAL_ candidates',
+    }
+  });
+
+  // Reload table when filters change
+  $('#filter-status, #filter-locale').on('change', function() {
+    table.ajax.reload();
+    highlightActiveStat();
+  });
+
+  loadStats();
+});
+
+async function loadStats() {
+  const res = await fetch('/api/stats');
+  const data = await res.json();
+  const bar = document.getElementById('stats-bar');
+
+  let html = `<div class="stat-card" data-status="">
+    <div class="label">Total</div><div class="value">${data.total.toLocaleString()}</div>
+  </div>`;
+  for (const [status, count] of Object.entries(data.by_status).sort((a, b) => b[1] - a[1])) {
+    html += `<div class="stat-card" data-status="${status}">
+      <div class="label">${status}</div><div class="value">${count.toLocaleString()}</div>
+    </div>`;
+  }
+  bar.innerHTML = html;
+
+  // Click stat card to filter
+  bar.querySelectorAll('.stat-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const s = card.dataset.status;
+      $('#filter-status').val(s).trigger('change');
+    });
+  });
+
+  // Populate locale filter
+  const localeSelect = document.getElementById('filter-locale');
+  for (const locale of Object.keys(data.by_locale).sort()) {
+    const opt = document.createElement('option');
+    opt.value = locale;
+    opt.textContent = `${locale} (${data.by_locale[locale]})`;
+    localeSelect.appendChild(opt);
+  }
+}
+
+function highlightActiveStat() {
+  const active = $('#filter-status').val();
+  document.querySelectorAll('.stat-card').forEach(c => {
+    c.classList.toggle('active', c.dataset.status === active);
+  });
+}
+
+function clearFilters() {
+  $('#filter-status').val('');
+  $('#filter-locale').val('');
+  table.search('').ajax.reload();
+  highlightActiveStat();
+}
+</script>
+</body>
+</html>

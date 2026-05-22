@@ -15,6 +15,8 @@ from dotenv import load_dotenv
 from sklearn.metrics.pairwise import cosine_similarity
 from sentence_transformers import SentenceTransformer
 
+from pipeline.normalize import strip_term_punctuation
+
 load_dotenv()
 
 try:
@@ -105,7 +107,9 @@ class LaBSEAligner:
         for n in range(1, max_ngram + 1):
             for start in range(len(tokens) - n + 1):
                 phrase = " ".join(tokens[start : start + n])
-                if phrase not in seen:
+                # Strip leading/trailing punctuation from n-gram edges
+                phrase = strip_term_punctuation(phrase)
+                if phrase and phrase not in seen:
                     seen.add(phrase)
                     phrases.append(phrase)
 

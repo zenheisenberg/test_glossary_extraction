@@ -64,6 +64,60 @@ def _call_llm(client: OpenAI, system_prompt: str, user_prompt: str) -> str | Non
     return None
 
 
+def _normalize_llm_json(data: dict) -> dict:
+    """Normalize LLM JSON output to match our Pydantic schema.
+
+    Handles:
+    - Uppercase enum values (APPROVED → approved)
+    - Nested 'scores' objects flattened to top-level fields
+    - Missing fields with sensible defaults
+    """
+    # Lowercase the verdict
+    if "verdict" in data and isinstance(data["verdict"], str):
+        data["verdict"] = data["verdict"].lower()
+
+    # Lowercase rejection_reasons entries
+    if "rejection_reasons" in data and isinstance(data["rejection_reasons"], list):
+        data["rejection_reasons"] = [r.lower() for r in data["rejection_reasons"]]
+
+    # Flatten nested 'scores' object if present
+    if "scores" in data and isinstance(data["scores"], dict):
+        scores = data.pop("scores")
+        field_map = {
+            "cleanness": "source_term_cleanness",
+            "source_term_cleanness": "source_term_cleanness",
+            "utility": "glossary_utility",
+            "glossary_utility": "glossary_utility",
+            "domain_relevance": "domain_relevance",
+            "translation_pair_validity": "translation_pair_validity",
+            "pair_validity": "translation_pair_validity",
+            "translation_consistency_value": "translation_consistency_value",
+            "consistency_value": "translation_consistency_value",
+        }
+        for key, value in scores.items():
+            mapped = field_map.get(key, key)
+            if mapped not in data:
+                data[mapped] = value
+
+    # Default confidence if missing
+    if "confidence" not in data:
+        data["confidence"] = 0.8
+
+    # Default notes if missing
+    if "notes" not in data:
+        data["notes"] = ""
+
+    # Default rejection_reasons if missing
+    if "rejection_reasons" not in data:
+        data["rejection_reasons"] = []
+
+    # Truncate notes if too long (model sometimes ignores length instruction)
+    if "notes" in data and isinstance(data["notes"], str) and len(data["notes"]) > 500:
+        data["notes"] = data["notes"][:497] + "..."
+
+    return data
+
+
 def _parse_phase1_response(raw: str | None) -> Phase1Judgment | None:
     """Parse Phase 1 JSON response into a validated Pydantic model."""
     if not raw:
@@ -74,6 +128,7 @@ def _parse_phase1_response(raw: str | None) -> Phase1Judgment | None:
         if text.startswith("```"):
             text = text.split("\n", 1)[1].rsplit("```", 1)[0]
         data = json.loads(text)
+        data = _normalize_llm_json(data)
         return Phase1Judgment.model_validate(data)
     except (json.JSONDecodeError, Exception) as e:
         logger.warning("Failed to parse Phase 1 response: %s | raw: %s", e, raw[:200])
@@ -89,6 +144,7 @@ def _parse_phase2_response(raw: str | None) -> Phase2Judgment | None:
         if text.startswith("```"):
             text = text.split("\n", 1)[1].rsplit("```", 1)[0]
         data = json.loads(text)
+        data = _normalize_llm_json(data)
         return Phase2Judgment.model_validate(data)
     except (json.JSONDecodeError, Exception) as e:
         logger.warning("Failed to parse Phase 2 response: %s | raw: %s", e, raw[:200])

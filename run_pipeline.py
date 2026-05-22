@@ -19,6 +19,7 @@ from config import (
 from db.database import CandidateDB
 from pipeline.ingest import load_excel, get_field_locale_pairs
 from pipeline.normalize import normalize_text
+from pipeline.normalize import strip_term_punctuation
 from pipeline.extract import extract_terms, load_nlp
 from pipeline.filter import filter_candidates
 from pipeline.align import LaBSEAligner
@@ -160,13 +161,21 @@ def run_pipeline(excel_path: str = None, db_path: str = None,
                         {}
                     )
 
+                    # Clean leading/trailing punctuation from both terms
+                    clean_source = strip_term_punctuation(alignment["source_term"])
+                    clean_target = strip_term_punctuation(alignment["target_term"])
+
+                    # Skip if stripping left an empty term
+                    if not clean_source or not clean_target:
+                        continue
+
                     candidate = {
                         "source_locale": SOURCE_LOCALE,
                         "target_locale": target_locale,
-                        "source_term": alignment["source_term"],
-                        "target_term": alignment["target_term"],
-                        "normalized_source": alignment["source_term"].lower().strip(),
-                        "normalized_target": alignment["target_term"].lower().strip(),
+                        "source_term": clean_source,
+                        "target_term": clean_target,
+                        "normalized_source": clean_source.lower().strip(),
+                        "normalized_target": clean_target.lower().strip(),
                         "domain": term_dict.get("domain", "general"),
                         "category": term_dict.get("domain", "general"),
                         "field_origin": pair["field"],

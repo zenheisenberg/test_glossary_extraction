@@ -34,7 +34,7 @@ class CandidateJudgment(BaseModel):
     translation_consistency_value: int = Field(ge=1, le=5)
     rejection_reasons: list[RejectionReason] = Field(default_factory=list)
     suggested_normalized_source: str | None = None
-    notes: str = Field(max_length=300, description="1-2 sentences, human-readable")
+    notes: str = Field(max_length=500, description="1-2 sentences, human-readable")
 
 
 class Phase1Judgment(BaseModel):
@@ -47,7 +47,7 @@ class Phase1Judgment(BaseModel):
     domain_relevance: int = Field(ge=1, le=5)
     rejection_reasons: list[RejectionReason] = Field(default_factory=list)
     suggested_normalized_source: str | None = None
-    notes: str = Field(max_length=300)
+    notes: str = Field(max_length=500)
 
 
 class Phase2Judgment(BaseModel):
@@ -59,4 +59,5 @@ class Phase2Judgment(BaseModel):
     translation_consistency_value: int = Field(ge=1, le=5)
     is_brand_verbatim: bool = False
     rejection_reasons: list[RejectionReason] = Field(default_factory=list)
+    notes: str = Field(max_length=500)
     notes: str = Field(max_length=300)

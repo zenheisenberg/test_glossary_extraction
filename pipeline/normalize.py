@@ -61,6 +61,32 @@ def normalize_punctuation(text: str) -> str:
     return normalized
 
 
+def strip_term_punctuation(term: str) -> str:
+    """Strip leading/trailing punctuation, symbols, and non-alphanumeric chars from a term.
+
+    Glossary terms should not start or end with punctuation, delimiters,
+    separators, symbols, orthographic marks, or special characters.
+    Hyphens are preserved internally (e.g. "T-shirt") but stripped from edges.
+
+    Examples:
+        ". cotton"      → "cotton"
+        "polyester."    → "polyester"
+        ",bomull"       → "bomull"
+        "(recycled)"    → "recycled"
+        "- jersey -"    → "jersey"
+        "100% cotton"   → "100% cotton"  (% is internal, not edge)
+    """
+    if not term:
+        return ""
+    # Strip characters that are NOT alphanumeric from both ends.
+    # \w matches [a-zA-Z0-9_] — we also want to keep digits and accented chars at edges.
+    stripped = re.sub(r'^[^\w]+', '', term)
+    stripped = re.sub(r'[^\w]+$', '', stripped)
+    # The above keeps underscores; strip those too from edges
+    stripped = stripped.strip('_')
+    return stripped if stripped else term
+
+
 def normalize_text(text: str) -> str:
     """Full normalization pipeline for fashion/PIM content."""
     text = strip_html(text)
