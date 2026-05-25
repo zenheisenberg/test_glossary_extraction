@@ -60,4 +60,3 @@ class Phase2Judgment(BaseModel):
     is_brand_verbatim: bool = False
     rejection_reasons: list[RejectionReason] = Field(default_factory=list)
     notes: str = Field(max_length=500)
-    notes: str = Field(max_length=300)

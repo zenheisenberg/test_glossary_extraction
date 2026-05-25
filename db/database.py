@@ -193,11 +193,13 @@ class CandidateDB:
             """
             rows = self.conn.execute(query, (limit,)).fetchall()
         else:
-            # Phase 2: individual locale pairs that survived Phase 1
+            # Phase 2: individual locale pairs that survived Phase 1,
+            # including verbatim entries (brand names) so we can verify
+            # they are correctly kept verbatim in each target locale.
             query = """
                 SELECT *
                 FROM candidates
-                WHERE status = 'phase1_approved'
+                WHERE status IN ('phase1_approved', 'phase1_verbatim_entry')
             """
             params: list = []
             if target_locale:

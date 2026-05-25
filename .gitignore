@@ -20,6 +20,7 @@ env/
 # Generated outputs
 glossary*.csv
 _groups_enriched.json
+*.log
 
 # IDE
 .vscode/

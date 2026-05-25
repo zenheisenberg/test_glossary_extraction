@@ -21,7 +21,9 @@ PORT = 8000
 COLUMNS = [
     "id", "status", "source_term", "target_term", "target_locale",
     "domain", "field_origin", "frequency", "labse_score", "final_score",
-    "reviewer_notes",
+    "reviewer_notes", "reviewer_notes", "reviewer_notes", "reviewer_notes",
+    "reviewer_notes", "reviewer_notes", "reviewer_notes", "reviewer_notes",
+    "reviewer_notes", "reviewer_notes",
 ]
 
 
@@ -61,6 +63,7 @@ class ViewerHandler(SimpleHTTPRequestHandler):
         # Custom filters
         status_filter = params.get("status", [""])[0]
         locale_filter = params.get("locale", [""])[0]
+        phase_filter = params.get("phase", [""])[0]
 
         # Ordering
         order_col_idx = int(params.get("order[0][column]", [0])[0])
@@ -78,6 +81,10 @@ class ViewerHandler(SimpleHTTPRequestHandler):
         if status_filter and status_filter != "all":
             where_clauses.append("status = ?")
             binds.append(status_filter)
+        elif phase_filter == "1":
+            where_clauses.append("status LIKE 'phase1_%'")
+        elif phase_filter == "2":
+            where_clauses.append("(status = 'approved' OR status LIKE 'phase2_%')")
         if locale_filter:
             where_clauses.append("target_locale = ?")
             binds.append(locale_filter)
@@ -100,12 +107,46 @@ class ViewerHandler(SimpleHTTPRequestHandler):
         rows = conn.execute(query, binds + [length, start]).fetchall()
         conn.close()
 
+        # Parse reviewer_notes JSON and flatten into row dicts
+        parsed_rows = []
+        for r in rows:
+            row_dict = dict(r)
+            # Always initialize rn_ fields (DataTables needs keys present)
+            row_dict["rn_confidence"] = None
+            row_dict["rn_cleanness"] = None
+            row_dict["rn_utility"] = None
+            row_dict["rn_domain_relevance"] = None
+            row_dict["rn_pair_validity"] = None
+            row_dict["rn_consistency_value"] = None
+            row_dict["rn_is_brand"] = None
+            row_dict["rn_rejection_reasons"] = []
+            row_dict["rn_suggested_source"] = None
+            row_dict["rn_notes"] = None
+
+            notes_raw = row_dict.get("reviewer_notes")
+            if notes_raw:
+                try:
+                    notes_obj = json.loads(notes_raw)
+                    row_dict["rn_confidence"] = notes_obj.get("confidence")
+                    row_dict["rn_cleanness"] = notes_obj.get("source_term_cleanness")
+                    row_dict["rn_utility"] = notes_obj.get("glossary_utility")
+                    row_dict["rn_domain_relevance"] = notes_obj.get("domain_relevance")
+                    row_dict["rn_pair_validity"] = notes_obj.get("translation_pair_validity")
+                    row_dict["rn_consistency_value"] = notes_obj.get("translation_consistency_value")
+                    row_dict["rn_is_brand"] = notes_obj.get("is_brand_verbatim")
+                    row_dict["rn_rejection_reasons"] = notes_obj.get("rejection_reasons", [])
+                    row_dict["rn_suggested_source"] = notes_obj.get("suggested_normalized_source")
+                    row_dict["rn_notes"] = notes_obj.get("notes", "")
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            parsed_rows.append(row_dict)
+
         # Format response per DataTables spec
         data = {
             "draw": draw,
             "recordsTotal": total_records,
             "recordsFiltered": filtered_count,
-            "data": [dict(r) for r in rows],
+            "data": parsed_rows,
         }
 
         self._json_response(data)
@@ -125,9 +166,22 @@ class ViewerHandler(SimpleHTTPRequestHandler):
         locales = {r["target_locale"]: r["cnt"] for r in locale_rows}
 
         total = conn.execute("SELECT COUNT(*) FROM candidates").fetchone()[0]
+
+        phase1_total = conn.execute(
+            "SELECT COUNT(*) FROM candidates WHERE status LIKE 'phase1_%'"
+        ).fetchone()[0]
+        phase2_total = conn.execute(
+            "SELECT COUNT(*) FROM candidates WHERE status = 'approved' OR status LIKE 'phase2_%'"
+        ).fetchone()[0]
+
         conn.close()
 
-        self._json_response({"total": total, "by_status": stats, "by_locale": locales})
+        self._json_response({
+            "total": total,
+            "by_status": stats,
+            "by_locale": locales,
+            "by_phase": {"1": phase1_total, "2": phase2_total},
+        })
 
     def _json_response(self, data):
         self.send_response(200)

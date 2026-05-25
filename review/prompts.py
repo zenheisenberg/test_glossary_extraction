@@ -93,7 +93,7 @@ Target locale: {target_locale}
 Field: {field_origin}
 Frequency: {frequency}
 LaBSE similarity score: {labse_score:.3f}
-"""
+{verbatim_hint}"""
 
 
 # Domain context definitions (customer-specific; only this changes per deployment)
@@ -150,7 +150,14 @@ def build_user_prompt_phase2(
     field_origin: str,
     frequency: int,
     labse_score: float,
+    is_verbatim_candidate: bool = False,
 ) -> str:
+    verbatim_hint = (
+        "Note: This term was classified as a brand/verbatim entry in Phase 1. "
+        f"Evaluate whether keeping it verbatim (untranslated) is correct for {target_locale}."
+        if is_verbatim_candidate
+        else ""
+    )
     return USER_PROMPT_PHASE2.format(
         source_term=source_term,
         target_term=target_term,
@@ -159,4 +166,5 @@ def build_user_prompt_phase2(
         field_origin=field_origin,
         frequency=frequency,
         labse_score=labse_score,
+        verbatim_hint=verbatim_hint,
     )

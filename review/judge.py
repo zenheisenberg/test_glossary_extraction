@@ -189,14 +189,14 @@ def review_phase1(candidates: list[dict]) -> list[dict]:
         # Map verdict to DB status
         status_map = {
             "approved": "phase1_approved",
-            "needs_human_review": "needs_human_review",
-            "rejected": "rejected",
-            "verbatim_entry": "verbatim_entry",
+            "needs_human_review": "phase1_needs_human_review",
+            "rejected": "phase1_rejected",
+            "verbatim_entry": "phase1_verbatim_entry",
         }
 
         return {
             "source_term": candidate["source_term"],
-            "status": status_map.get(judgment.verdict.value, "needs_human_review"),
+            "status": status_map.get(judgment.verdict.value, "phase1_needs_human_review"),
             "reviewer_notes": json.dumps(judgment.model_dump(), ensure_ascii=False),
         }
 
@@ -254,6 +254,7 @@ def review_phase2(candidates: list[dict], target_locale: str | None = None) -> l
             field_origin=candidate.get("field_origin", "unknown"),
             frequency=candidate.get("frequency", 1),
             labse_score=candidate.get("labse_score", 0.0) or 0.0,
+            is_verbatim_candidate=candidate.get("status") == "phase1_verbatim_entry",
         )
         raw = _call_llm(client, system_prompt, user_prompt)
         judgment = _parse_phase2_response(raw)
@@ -263,14 +264,14 @@ def review_phase2(candidates: list[dict], target_locale: str | None = None) -> l
         # Map verdict to DB status
         status_map = {
             "approved": "approved",
-            "needs_human_review": "needs_human_review",
-            "rejected": "rejected",
-            "verbatim_entry": "verbatim_entry",
+            "needs_human_review": "phase2_needs_human_review",
+            "rejected": "phase2_rejected",
+            "verbatim_entry": "phase2_verbatim_entry",
         }
 
         return {
             "id": candidate["id"],
-            "status": status_map.get(judgment.verdict.value, "needs_human_review"),
+            "status": status_map.get(judgment.verdict.value, "phase2_needs_human_review"),
             "reviewer_notes": json.dumps(judgment.model_dump(), ensure_ascii=False),
         }
 

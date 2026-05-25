@@ -12,9 +12,14 @@
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: #f5f7fa; color: #1a1a2e; padding: 24px; }
 h1 { font-size: 1.5rem; margin-bottom: 20px; }
 .stats-bar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
-.stat-card { background: #fff; border-radius: 8px; padding: 12px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); cursor: pointer; transition: box-shadow 0.15s; }
+.stats-section { display: flex; flex-direction: column; gap: 6px; }
+.stats-section-label { font-size: 0.68rem; text-transform: uppercase; color: #999; letter-spacing: 0.6px; font-weight: 600; padding-left: 4px; }
+.stats-section-cards { display: flex; gap: 8px; flex-wrap: wrap; }
+.stat-card { background: #fff; border-radius: 8px; padding: 12px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); cursor: pointer; transition: box-shadow 0.15s; border: 2px solid transparent; }
 .stat-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
-.stat-card.active { border: 2px solid #4361ee; }
+.stat-card.active { border-color: #4361ee; }
+.stat-card.phase-card { background: #f0f4ff; }
+.stat-card.phase-card.active { border-color: #4361ee; background: #e0e8ff; }
 .stat-card .label { font-size: 0.7rem; text-transform: uppercase; color: #666; letter-spacing: 0.5px; }
 .stat-card .value { font-size: 1.3rem; font-weight: 700; margin-top: 2px; }
 .filters { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }
@@ -24,12 +29,21 @@ h1 { font-size: 1.5rem; margin-bottom: 20px; }
 .table-container { background: #fff; border-radius: 8px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
 /* Badge styles */
 .badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.72rem; font-weight: 600; white-space: nowrap; }
-.badge-needs_review { background: #fff3cd; color: #856404; }
-.badge-phase1_approved { background: #d4edda; color: #155724; }
-.badge-approved { background: #28a745; color: #fff; }
-.badge-rejected { background: #f8d7da; color: #721c24; }
-.badge-needs_human_review { background: #cce5ff; color: #004085; }
-.badge-verbatim_entry { background: #e2d9f3; color: #4a148c; }
+.badge-needs_review          { background: #fff3cd; color: #856404; }
+/* Phase 1 */
+.badge-phase1_approved       { background: #d4edda; color: #155724; }
+.badge-phase1_rejected       { background: #f8d7da; color: #721c24; }
+.badge-phase1_needs_human_review { background: #cce5ff; color: #004085; }
+.badge-phase1_verbatim_entry { background: #e2d9f3; color: #4a148c; }
+/* Phase 2 */
+.badge-approved              { background: #28a745; color: #fff; }
+.badge-phase2_rejected       { background: #c0392b; color: #fff; }
+.badge-phase2_needs_human_review { background: #0066cc; color: #fff; }
+.badge-phase2_verbatim_entry { background: #6a0dad; color: #fff; }
+/* Legacy (pre-rename) */
+.badge-rejected              { background: #f8d7da; color: #721c24; }
+.badge-needs_human_review    { background: #cce5ff; color: #004085; }
+.badge-verbatim_entry        { background: #e2d9f3; color: #4a148c; }
 /* Score colors */
 .score-high { color: #28a745; font-weight: 600; }
 .score-mid { color: #e67e22; font-weight: 600; }
@@ -48,15 +62,16 @@ table.dataTable tbody td { max-width: 220px; overflow: hidden; text-overflow: el
 <div class="stats-bar" id="stats-bar"></div>
 
 <div class="filters">
+  <label>Phase:
+    <select id="filter-phase">
+      <option value="">All Phases</option>
+      <option value="1">Phase 1</option>
+      <option value="2">Phase 2</option>
+    </select>
+  </label>
   <label>Status:
     <select id="filter-status">
-      <option value="">All</option>
-      <option value="needs_review">needs_review</option>
-      <option value="phase1_approved">phase1_approved</option>
-      <option value="approved">approved</option>
-      <option value="rejected">rejected</option>
-      <option value="needs_human_review">needs_human_review</option>
-      <option value="verbatim_entry">verbatim_entry</option>
+      <option value="">All Statuses</option>
     </select>
   </label>
   <label>Locale:
@@ -81,6 +96,15 @@ table.dataTable tbody td { max-width: 220px; overflow: hidden; text-overflow: el
         <th>Freq</th>
         <th>LaBSE</th>
         <th>Score</th>
+        <th>Conf</th>
+        <th>Clean</th>
+        <th>Utility</th>
+        <th>Domain Rel</th>
+        <th>Pair Valid</th>
+        <th>Consist</th>
+        <th>Brand</th>
+        <th>Rejections</th>
+        <th>Suggested</th>
         <th>Notes</th>
       </tr>
     </thead>
@@ -100,6 +124,14 @@ function scoreHtml(val) {
   const n = parseFloat(val).toFixed(3);
   if (val >= 0.8) return `<span class="score-high">${n}</span>`;
   if (val >= 0.6) return `<span class="score-mid">${n}</span>`;
+  return `<span class="score-low">${n}</span>`;
+}
+
+function scoreInt(val) {
+  if (val === null || val === undefined) return '-';
+  const n = parseInt(val);
+  if (n >= 4) return `<span class="score-high">${n}</span>`;
+  if (n >= 3) return `<span class="score-mid">${n}</span>`;
   return `<span class="score-low">${n}</span>`;
 }
 
@@ -123,6 +155,7 @@ $(document).ready(function() {
       data: function(d) {
         d.status = $('#filter-status').val();
         d.locale = $('#filter-locale').val();
+        d.phase  = $('#filter-phase').val();
       }
     },
     columns: [
@@ -136,7 +169,16 @@ $(document).ready(function() {
       { data: 'frequency', width: '50px' },
       { data: 'labse_score', render: (d) => scoreHtml(d), width: '70px' },
       { data: 'final_score', render: (d) => scoreHtml(d), width: '70px' },
-      { data: 'reviewer_notes', render: (d) => d ? `<span title="${esc(d)}">${esc(d).substring(0, 50)}</span>` : '-' },
+      { data: 'rn_confidence', defaultContent: '-', render: (d) => d != null ? parseFloat(d).toFixed(2) : '-', width: '50px' },
+      { data: 'rn_cleanness', defaultContent: '-', render: (d) => scoreInt(d), width: '50px' },
+      { data: 'rn_utility', defaultContent: '-', render: (d) => scoreInt(d), width: '50px' },
+      { data: 'rn_domain_relevance', defaultContent: '-', render: (d) => scoreInt(d), width: '50px' },
+      { data: 'rn_pair_validity', defaultContent: '-', render: (d) => scoreInt(d), width: '50px' },
+      { data: 'rn_consistency_value', defaultContent: '-', render: (d) => scoreInt(d), width: '50px' },
+      { data: 'rn_is_brand', defaultContent: '-', render: (d) => d === true ? '✓' : (d === false ? '-' : ''), width: '50px' },
+      { data: 'rn_rejection_reasons', defaultContent: '-', render: (d) => Array.isArray(d) && d.length ? d.map(r => `<span class="badge badge-rejected">${r}</span>`).join(' ') : '-' },
+      { data: 'rn_suggested_source', defaultContent: '-', render: (d) => d ? `<span title="${esc(d)}">${esc(d)}</span>` : '-' },
+      { data: 'rn_notes', defaultContent: '-', render: (d) => d ? `<span title="${esc(d)}">${esc(d).substring(0, 80)}</span>` : '-' },
     ],
     pageLength: 50,
     lengthMenu: [25, 50, 100, 200],
@@ -151,7 +193,12 @@ $(document).ready(function() {
   });
 
   // Reload table when filters change
-  $('#filter-status, #filter-locale').on('change', function() {
+  $('#filter-status, #filter-locale, #filter-phase').on('change', function() {
+    // When phase changes, reset status filter to avoid cross-phase confusion
+    if (this.id === 'filter-phase') {
+      populateStatusOptions(window._lastStats, $('#filter-phase').val());
+      $('#filter-status').val('');
+    }
     table.ajax.reload();
     highlightActiveStat();
   });
@@ -162,27 +209,67 @@ $(document).ready(function() {
 async function loadStats() {
   const res = await fetch('/api/stats');
   const data = await res.json();
+  window._lastStats = data;
   const bar = document.getElementById('stats-bar');
 
-  let html = `<div class="stat-card" data-status="">
-    <div class="label">Total</div><div class="value">${data.total.toLocaleString()}</div>
+  // ── Summary section ───────────────────────────────────────────────────────
+  let html = `<div class="stats-section">
+    <div class="stats-section-label">Summary</div>
+    <div class="stats-section-cards">
+      <div class="stat-card" data-filter-type="none" data-status="" data-phase="">
+        <div class="label">Total</div><div class="value">${data.total.toLocaleString()}</div>
+      </div>
+    </div>
   </div>`;
+
+  // ── Phase section ─────────────────────────────────────────────────────────
+  html += `<div class="stats-section">
+    <div class="stats-section-label">By Phase</div>
+    <div class="stats-section-cards">
+      <div class="stat-card phase-card" data-filter-type="phase" data-phase="1">
+        <div class="label">Phase 1</div><div class="value">${(data.by_phase['1'] || 0).toLocaleString()}</div>
+      </div>
+      <div class="stat-card phase-card" data-filter-type="phase" data-phase="2">
+        <div class="label">Phase 2</div><div class="value">${(data.by_phase['2'] || 0).toLocaleString()}</div>
+      </div>
+    </div>
+  </div>`;
+
+  // ── By status section ─────────────────────────────────────────────────────
+  html += `<div class="stats-section">
+    <div class="stats-section-label">By Status</div>
+    <div class="stats-section-cards" id="status-cards">`;
   for (const [status, count] of Object.entries(data.by_status).sort((a, b) => b[1] - a[1])) {
-    html += `<div class="stat-card" data-status="${status}">
+    html += `<div class="stat-card" data-filter-type="status" data-status="${status}">
       <div class="label">${status}</div><div class="value">${count.toLocaleString()}</div>
     </div>`;
   }
+  html += `</div></div>`;
+
   bar.innerHTML = html;
 
-  // Click stat card to filter
+  // Click handlers
   bar.querySelectorAll('.stat-card').forEach(card => {
     card.addEventListener('click', () => {
-      const s = card.dataset.status;
-      $('#filter-status').val(s).trigger('change');
+      const type = card.dataset.filterType;
+      if (type === 'phase') {
+        $('#filter-phase').val(card.dataset.phase);
+        $('#filter-status').val('');
+        populateStatusOptions(data, card.dataset.phase);
+      } else if (type === 'status') {
+        $('#filter-status').val(card.dataset.status);
+      } else {
+        $('#filter-phase').val('');
+        $('#filter-status').val('');
+        populateStatusOptions(data, '');
+      }
+      table.ajax.reload();
+      highlightActiveStat();
     });
   });
 
-  // Populate locale filter
+  // Populate status and locale dropdowns
+  populateStatusOptions(data, '');
   const localeSelect = document.getElementById('filter-locale');
   for (const locale of Object.keys(data.by_locale).sort()) {
     const opt = document.createElement('option');
@@ -192,16 +279,48 @@ async function loadStats() {
   }
 }
 
+function populateStatusOptions(data, phase) {
+  const select = document.getElementById('filter-status');
+  const current = select.value;
+  // Clear all except first "All" option
+  while (select.options.length > 1) select.remove(1);
+
+  const allStatuses = Object.keys(data.by_status).sort();
+  const filtered = allStatuses.filter(s => {
+    if (phase === '1') return s.startsWith('phase1_') || s === 'needs_review';
+    if (phase === '2') return s === 'approved' || s.startsWith('phase2_');
+    return true;
+  });
+  for (const s of filtered) {
+    const opt = document.createElement('option');
+    opt.value = s;
+    opt.textContent = `${s} (${data.by_status[s]})`;
+    select.appendChild(opt);
+  }
+  // Restore previous selection if still valid
+  if (filtered.includes(current)) select.value = current;
+}
+
 function highlightActiveStat() {
-  const active = $('#filter-status').val();
+  const activeStatus = $('#filter-status').val();
+  const activePhase  = $('#filter-phase').val();
   document.querySelectorAll('.stat-card').forEach(c => {
-    c.classList.toggle('active', c.dataset.status === active);
+    const type = c.dataset.filterType;
+    if (type === 'phase') {
+      c.classList.toggle('active', c.dataset.phase === activePhase);
+    } else if (type === 'status') {
+      c.classList.toggle('active', c.dataset.status === activeStatus);
+    } else {
+      c.classList.toggle('active', !activeStatus && !activePhase);
+    }
   });
 }
 
 function clearFilters() {
+  $('#filter-phase').val('');
   $('#filter-status').val('');
   $('#filter-locale').val('');
+  populateStatusOptions(window._lastStats || { by_status: {} }, '');
   table.search('').ajax.reload();
   highlightActiveStat();
 }
